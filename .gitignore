@@ -2,3 +2,6 @@ __pycache__/
 *-png/
 *.pdf
 .DS_Store
+blocks.txt
+drawings.txt
+scratch.py

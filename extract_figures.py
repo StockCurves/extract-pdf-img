@@ -150,6 +150,22 @@ def find_figure_region(page: fitz.Page,
                 continue
             gap_top = max(gap_top, by1)
 
+        # Also bound by other captions/regions above us
+        for c in all_captions:
+            if c is caption:
+                continue
+            cy1 = c.get("region", c["bbox"]).y1
+            if cy1 <= cap.y0 + 5:
+                # Check if 'c' is full-width. Its caption might be 'left',
+                # but its computed region could be full-width.
+                c_is_full = c["col"] == "full"
+                if "region" in c:
+                    c_is_full = c["region"].width > pw * 0.7
+                
+                # Must share column, or one must be full-width
+                if c_is_full or col == "full" or c["col"] == col:
+                    gap_top = max(gap_top, cy1)
+
         # ── auto-detect full-width figures ────────────────────────────────
         # A figure is full-width when its caption is in the left column but
         # NO right-column text blocks exist in the figure's vertical band.
@@ -163,7 +179,12 @@ def find_figure_region(page: fitz.Page,
                 and b[1] < cap.y0 - 5   # block top above caption
                 for b in blocks
             )
-            if not right_col_text_in_band:
+            right_col_caption_near = any(
+                c["bbox"].x0 >= mid_x - 10
+                and gap_top < c["bbox"].y0 < cap.y0 + 100
+                for c in all_captions if c is not caption
+            )
+            if not right_col_text_in_band and not right_col_caption_near:
                 # No right-column content alongside the figure → full-width
                 cx0, cx1 = _col_bounds("full", pw)
 
@@ -194,7 +215,7 @@ def find_figure_region(page: fitz.Page,
         gap_bottom = ph - PAGE_MARGIN_BOTTOM
         if cap_tops:
             gap_bottom = min(gap_bottom, cap_tops[0])
-        elif body_tops:
+        if body_tops:
             # skip blocks immediately following subtitle (within 60pt)
             far_blocks = [y for y in body_tops if y > cap.y1 + 60]
             if far_blocks:
@@ -268,8 +289,18 @@ def extract(pdf_path: Path,
         pg  = page.number + 1
         caps = get_captions(page, include_tables=include_tables)
 
+        # Pass 1: compute table regions
         for cap in caps:
-            rect = find_figure_region(page, cap, caps)
+            if cap["type"] == "table":
+                cap["region"] = find_figure_region(page, cap, caps)
+
+        # Pass 2: compute figure regions
+        for cap in caps:
+            if cap["type"] == "figure":
+                cap["region"] = find_figure_region(page, cap, caps)
+
+        for cap in caps:
+            rect = cap.get("region")
             if rect is None or rect.is_empty or rect.width < 10 or rect.height < 10:
                 print(f"  [SKIP] {cap['label']} p.{pg} — empty region")
                 continue
