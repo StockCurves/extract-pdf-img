@@ -282,10 +282,12 @@ def find_figure_region(page: fitz.Page,
             mid_x = pw / 2
             if col == "left":
                 opp_cap = any(c["bbox"].x0 >= mid_x - 10 and cap.y0 < c["bbox"].y0 < gap_bottom_full + 100 for c in all_captions if c is not caption)
+                crosses_cap = any(d.get("rect", fitz.Rect()).y0 < cap.y0 and d.get("rect", fitz.Rect()).y1 > cap.y0 and d.get("rect", fitz.Rect()).x1 > mid_x for d in page.get_drawings() if d.get("rect", fitz.Rect()).width > 3)
             else:
                 opp_cap = any(c["bbox"].x1 <= mid_x + 10 and cap.y0 < c["bbox"].y0 < gap_bottom_full + 100 for c in all_captions if c is not caption)
+                crosses_cap = any(d.get("rect", fitz.Rect()).y0 < cap.y0 and d.get("rect", fitz.Rect()).y1 > cap.y0 and d.get("rect", fitz.Rect()).x0 < mid_x for d in page.get_drawings() if d.get("rect", fitz.Rect()).width > 3)
 
-            if not opp_cap and _graphics_span_both_columns(page, cap.y0, gap_bottom_full, pw):
+            if not opp_cap and not crosses_cap and _graphics_span_both_columns(page, cap.y0, gap_bottom_full, pw):
                 col = "full"
                 cx0, cx1 = cx0_full, cx1_full
 
