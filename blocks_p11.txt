@@ -1,0 +1,18 @@
+Page 11: width=594 height=792
+--- Text blocks ---
+  y=33-40 x=38-552 :: YANG et al.: PREDICTION AND ANALYSIS OF EMI SPECTRUM BASED O
+  y=406-423 x=38-289 :: Fig. 24. DM noise of a boost converter. (a) Peak value. (b) 
+  y=441-654 x=38-289 :: differential mode (DM) noise was separated with a noise sepa
+  y=670-680 x=38-245 :: B. Experimental Veriﬁcation for SPWM Waveforms
+  y=687-746 x=38-289 :: The developed theory for SPWM waveform is also veri- ﬁed wit
+  y=182-198 x=301-552 :: Fig. 25. (a) Measurement setup for SPWM waveform in an ac/dc
+  y=219-235 x=312-541 :: TABLE III SCAN TIME OF CISPR 16 EMI MEASUREMENT USING RIGOL 
+  y=310-439 x=301-552 :: of insulated-gate bipolar transistors (IGBTs) and the ground
+  y=441-499 x=301-552 :: Based on the saved time-domain waveform, the frequency, magn
+  y=501-547 x=301-552 :: In Fig. 26, for band A, because k = 3.3 > 2, FFT result is s
+  y=549-642 x=301-552 :: In Table III, compared with actual time used in a standard E
+  y=658-668 x=301-454 :: C. Experimental Veriﬁcation for SFM
+  y=675-745 x=301-552 :: The measured and predicted EMI are compared in Fig. 27 for S
+  y=777-787 x=68-526 :: Authorized licensed use limited to: University of Florida. D
+
+Drawings count: 12177

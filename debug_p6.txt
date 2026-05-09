@@ -1,0 +1,16 @@
+Page 6: width=612 height=792
+  y=31-38 x=49-563 :: WANG AND LIN: 118 dB PSRR, 0.00067% (−103.5 dB) THD+N AND 3.
+  y=292-300 x=49-257 :: Fig. 8. Schematic of the PWM output common-mode control.
+  y=325-538 x=49-300 :: causes the change of the duty cycle and also the change of C
+  y=557-567 x=49-167 :: C. Triangle Clock Generator
+  y=573-750 x=49-300 :: In the PWM-type Class-D ampliﬁer, the triangle clock generat
+  y=253-261 x=312-478 :: Fig. 9. Schematic of the triangle clock generator.
+  y=471-479 x=312-508 :: Fig. 10. Schematic of the nonoverlapping clock generator.
+  y=504-597 x=312-563 :: discharging current of the integrator which is formed by RSA
+  y=603-621 x=320-554 :: Tcharge = Tdischarge = 2RSAWCSAW × (VTOP −VBOT)
+  y=617-628 x=499-545 :: (VA −VB)
+  y=628-654 x=346-467 :: fS = 1  Tcharge + Tdischarge 
+  y=656-681 x=357-563 :: = 1 4RSAWCSAW × (VA −VB) (VTOP −VBOT). (5)
+  y=686-697 x=312-563 :: In the Class-D ampliﬁer, fS is approximately set to 650 kHz.
+  y=713-723 x=312-461 :: D. Nonoverlapping Clock Generator
+  y=728-750 x=312-563 :: Fig. 10 depicts the schematic of the nonoverlapping clock ge

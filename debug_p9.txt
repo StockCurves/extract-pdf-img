@@ -1,0 +1,8 @@
+Page 9: width=612 height=792
+  y=31-38 x=49-563 :: 2816 IEEE JOURNAL OF SOLID-STATE CIRCUITS, VOL. 51, NO. 12, 
+  y=232-240 x=49-347 :: Fig. 15. FFT spectrum at around 217 Hz with and without PWM 
+  y=426-434 x=49-231 :: Fig. 16. Histogram of PSRR measurement at 217 Hz.
+  y=453-750 x=49-300 :: resistances from the bonding effects of the QFN package. Thi
+  y=436-444 x=312-480 :: Fig. 17. Measurement of PSRR versus frequency.
+  y=465-714 x=312-563 :: the Class-D output at 217 Hz is reduced to -124 dBV. This Cl
+  y=722-750 x=314-563 :: FOM1 = η IQ  A × THD+N|1kHz × 105 (7)

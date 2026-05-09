@@ -102,7 +102,7 @@ def get_captions(page: fitz.Page, include_tables: bool = True) -> list[dict]:
                     "label":     m.group(1),
                     "full_text": " ".join(lines),
                     "bbox":      fitz.Rect(x0, y0, x1, y1),
-                    "col":       "full",   # tables always span full width in IEEE
+                    "col":       _classify_col(x0, x1, pw),
                 })
 
     return results
@@ -112,6 +112,66 @@ def get_captions(page: fitz.Page, include_tables: bool = True) -> list[dict]:
 
 def _text_blocks_on_page(page: fitz.Page) -> list[tuple]:
     return [b for b in page.get_text("blocks") if b[6] == 0]
+
+
+def _is_body_text(block_tuple) -> bool:
+    """Return True if a text block looks like real body text (not a short
+    in-figure label like '(a)', axis ticks, etc.)."""
+    return len(block_tuple[4].strip()) >= 5
+
+
+def _graphics_span_both_columns(page: fitz.Page,
+                                 y_top: float, y_bot: float,
+                                 pw: float) -> bool:
+    """Check whether graphic content in the vertical band [y_top, y_bot]
+    spans both columns — i.e. there are significant drawings/images on
+    BOTH sides of the page midpoint.
+
+    This is the reliable way to decide if a figure/table is truly full-width.
+    Instead of guessing from absence-of-text, we verify the drawn content
+    itself is present in both the left and right halves.
+    """
+    mid_x = pw / 2
+    left_count = 0
+    right_count = 0
+    THRESHOLD = 5  # need at least this many graphics on each side
+
+    # Check vector drawings
+    for d in page.get_drawings():
+        r = d.get("rect", fitz.Rect())
+        if r.y1 < y_top or r.y0 > y_bot:
+            continue
+        if r.width < 3 or r.height < 3:
+            continue
+        if r.x1 < mid_x:
+            left_count += 1
+        elif r.x0 > mid_x:
+            right_count += 1
+        else:
+            # Straddles midpoint — counts for both
+            left_count += 1
+            right_count += 1
+        if left_count >= THRESHOLD and right_count >= THRESHOLD:
+            return True
+
+    # Check embedded images
+    for img_info in page.get_images(full=True):
+        try:
+            for r in page.get_image_rects(img_info[0]):
+                if r.y1 < y_top or r.y0 > y_bot:
+                    continue
+                if r.width < 10 or r.height < 10:
+                    continue
+                if r.x0 < mid_x - 10 and r.x1 > mid_x + 10:
+                    return True  # single image crossing midpoint
+                if r.x1 < mid_x:
+                    left_count += THRESHOLD
+                elif r.x0 > mid_x:
+                    right_count += THRESHOLD
+        except Exception:
+            pass
+
+    return left_count >= THRESHOLD and right_count >= THRESHOLD
 
 
 def find_figure_region(page: fitz.Page,
@@ -124,6 +184,9 @@ def find_figure_region(page: fitz.Page,
                in IEEE-style papers).
     Tables   → region BELOW the caption label (caption label sits above the
                table body in IEEE-style papers).
+
+    Full-width expansion is only applied when actual drawn graphic content
+    is verified to cross the page midpoint (using page.get_drawings()).
     """
     pw, ph = page.rect.width, page.rect.height
     cap   = caption["bbox"]
@@ -137,90 +200,96 @@ def find_figure_region(page: fitz.Page,
         return bx1 > cx0 + 5 and bx0 < cx1 - 5
 
     if caption["type"] == "figure":
-        # ── search upward from caption top ────────────────────────────────
-        # Use initially-classified column to find the vertical gap_top
-        gap_top = PAGE_MARGIN_TOP
-        for b in blocks:
-            bx0, by0, bx1, by1 = b[0], b[1], b[2], b[3]
-            if by1 > cap.y0 - 2:            # must be above caption
-                continue
-            if by1 < PAGE_MARGIN_TOP + 4:   # skip running header
-                continue
-            if not overlaps_col(bx0, bx1):  # must share column x-range
-                continue
-            gap_top = max(gap_top, by1)
+        def calc_gap_top(bound_x0, bound_x1):
+            g_top = PAGE_MARGIN_TOP
+            for b in blocks:
+                if b[3] > cap.y0 - 2: continue
+                if b[3] < PAGE_MARGIN_TOP + 4: continue
+                if not (b[2] > bound_x0 + 5 and b[0] < bound_x1 - 5): continue
+                if not _is_body_text(b): continue
+                g_top = max(g_top, b[3] + 6)
 
-        # Also bound by other captions/regions above us
-        for c in all_captions:
-            if c is caption:
-                continue
-            cy1 = c.get("region", c["bbox"]).y1
-            if cy1 <= cap.y0 + 5:
-                # Check if 'c' is full-width. Its caption might be 'left',
-                # but its computed region could be full-width.
-                c_is_full = c["col"] == "full"
-                if "region" in c:
-                    c_is_full = c["region"].width > pw * 0.7
-                
-                # Must share column, or one must be full-width
-                if c_is_full or col == "full" or c["col"] == col:
-                    gap_top = max(gap_top, cy1)
+            for c in all_captions:
+                if c is caption: continue
+                cy1 = c.get("region", c["bbox"]).y1
+                if cy1 <= cap.y0 + 5:
+                    c_is_full = c["col"] == "full"
+                    if "region" in c:
+                        c_is_full = c["region"].width > pw * 0.7
+                    is_full_check = (bound_x1 - bound_x0) > pw * 0.7
+                    if c_is_full or is_full_check or c["col"] == col:
+                        g_top = max(g_top, cy1 + 6)
+            return g_top
 
-        # ── auto-detect full-width figures ────────────────────────────────
-        # A figure is full-width when its caption is in the left column but
-        # NO right-column text blocks exist in the figure's vertical band.
-        # This catches figures whose captions are narrow even though the
-        # figure graphic spans the entire page width.
-        if col != "right":
+        gap_top_single = calc_gap_top(cx0, cx1)
+
+        # ── auto-detect full-width ──────────────────────────────────────
+        cx0_full, cx1_full = _col_bounds("full", pw)
+        if col != "full":
+            gap_top_full = calc_gap_top(cx0_full, cx1_full)
             mid_x = pw / 2
-            right_col_text_in_band = any(
-                b[0] >= mid_x - 10    # block starts at/past midpoint
-                and b[3] > gap_top + 5  # block bottom below gap_top
-                and b[1] < cap.y0 - 5   # block top above caption
-                for b in blocks
-            )
-            right_col_caption_near = any(
-                c["bbox"].x0 >= mid_x - 10
-                and gap_top < c["bbox"].y0 < cap.y0 + 100
-                for c in all_captions if c is not caption
-            )
-            if not right_col_text_in_band and not right_col_caption_near:
-                # No right-column content alongside the figure → full-width
-                cx0, cx1 = _col_bounds("full", pw)
+            
+            # If full-width gap is lower, check if we'd lose graphics in our own column
+            lost_graphics = False
+            if gap_top_full > gap_top_single + 10:
+                for d in page.get_drawings():
+                    r = d.get("rect", fitz.Rect())
+                    if r.y1 > gap_top_single and r.y0 < gap_top_full and r.width > 3 and r.height > 3:
+                        if (col == "left" and r.x0 < mid_x) or (col == "right" and r.x1 > mid_x):
+                            lost_graphics = True
+                            break
 
+            if not lost_graphics:
+                if col == "left":
+                    opp_cap = any(c["bbox"].x0 >= mid_x - 10 and gap_top_full < c["bbox"].y0 < cap.y0 + 100 for c in all_captions if c is not caption)
+                    # Check if right column drawings cross our caption line
+                    crosses_cap = any(d.get("rect", fitz.Rect()).y0 < cap.y0 and d.get("rect", fitz.Rect()).y1 > cap.y0 and d.get("rect", fitz.Rect()).x1 > mid_x for d in page.get_drawings() if d.get("rect", fitz.Rect()).width > 3)
+                else:
+                    opp_cap = any(c["bbox"].x1 <= mid_x + 10 and gap_top_full < c["bbox"].y0 < cap.y0 + 100 for c in all_captions if c is not caption)
+                    # Check if left column drawings cross our caption line
+                    crosses_cap = any(d.get("rect", fitz.Rect()).y0 < cap.y0 and d.get("rect", fitz.Rect()).y1 > cap.y0 and d.get("rect", fitz.Rect()).x0 < mid_x for d in page.get_drawings() if d.get("rect", fitz.Rect()).width > 3)
+
+                if not opp_cap and not crosses_cap and _graphics_span_both_columns(page, gap_top_full, cap.y0, pw):
+                    col = "full"
+                    cx0, cx1 = cx0_full, cx1_full
+
+        gap_top = calc_gap_top(cx0, cx1)
         return fitz.Rect(cx0, gap_top, cx1, cap.y1)
 
     else:
         # ── TABLE: caption label is ABOVE; table body is BELOW ────────────
-        # IEEE table captions are centered; the table body spans full width.
-        # Find the bottom of the table as the top of the next caption / figure
-        # block on this page (searching full page width).
         search_y = cap.y1 + 30   # skip subtitle zone
 
-        # Collect the y0 of any caption on the same page that is below the table
-        cap_tops = sorted(
-            [c["bbox"].y0 for c in all_captions
-             if c["bbox"].y0 > search_y and c is not caption],
-        )
+        def calc_gap_bottom(bound_x0, bound_x1):
+            c_tops = sorted([c["bbox"].y0 for c in all_captions if c["bbox"].y0 > search_y and c is not caption])
+            b_tops = sorted([b[1] for b in blocks if b[1] >= search_y and b[2] > bound_x0 + 5 and b[0] < bound_x1 - 5 and _is_body_text(b)])
+            
+            g_bot = ph - PAGE_MARGIN_BOTTOM
+            if c_tops:
+                g_bot = min(g_bot, c_tops[0] - 6)
+            if b_tops:
+                far_blocks = [y for y in b_tops if y > cap.y1 + 60]
+                if far_blocks:
+                    g_bot = min(g_bot, far_blocks[0] - 6)
+            return g_bot
 
-        # Also collect body-text block tops (full-width scan) below search_y
-        body_tops = sorted(
-            [b[1] for b in blocks
-             if b[1] >= search_y
-             and b[2] > cx0 + 5 and b[0] < cx1 - 5]
-        )
+        gap_bottom_single = calc_gap_bottom(cx0, cx1)
 
-        # Use whichever is closer: next caption top or first body text top
-        # that is clearly past the table (skip subtitle ~within first 30pt)
-        gap_bottom = ph - PAGE_MARGIN_BOTTOM
-        if cap_tops:
-            gap_bottom = min(gap_bottom, cap_tops[0])
-        if body_tops:
-            # skip blocks immediately following subtitle (within 60pt)
-            far_blocks = [y for y in body_tops if y > cap.y1 + 60]
-            if far_blocks:
-                gap_bottom = min(gap_bottom, far_blocks[0])
+        # ── auto-detect full-width ──────────────────────────────────────
+        cx0_full, cx1_full = _col_bounds("full", pw)
+        if col != "full":
+            gap_bottom_full = calc_gap_bottom(cx0_full, cx1_full)
+            mid_x = pw / 2
+            if col == "left":
+                opp_cap = any(c["bbox"].x0 >= mid_x - 10 and cap.y0 < c["bbox"].y0 < gap_bottom_full + 100 for c in all_captions if c is not caption)
+            else:
+                opp_cap = any(c["bbox"].x1 <= mid_x + 10 and cap.y0 < c["bbox"].y0 < gap_bottom_full + 100 for c in all_captions if c is not caption)
 
+            if not opp_cap and _graphics_span_both_columns(page, cap.y0, gap_bottom_full, pw):
+                col = "full"
+                cx0, cx1 = cx0_full, cx1_full
+
+        gap_bottom = calc_gap_bottom(cx0, cx1)
         return fitz.Rect(cx0, cap.y0, cx1, gap_bottom)
 
 
@@ -314,14 +383,19 @@ def extract(pdf_path: Path,
             if add_caption:
                 img = add_caption_bar(img, cap["full_text"], dpi=dpi)
 
+            # Use a truncated, filesystem‑safe stem for filenames (max 50 chars)
+            safe_stem = stem[:50].replace(' ', '_')
             if cap["type"] == "figure":
                 fig_n += 1
-                fname = f"{stem}-fig{fig_n:03d}.png"
+                fname = f"{safe_stem}-fig{fig_n:03d}.png"
             else:
                 tbl_n += 1
-                fname = f"{stem}-tbl{tbl_n:03d}.png"
+                fname = f"{safe_stem}-tbl{tbl_n:03d}.png"
+
 
             out_path = out_dir / fname
+            # Guarantee the directory exists (handles edge‑cases with long or missing paths)
+            out_path.parent.mkdir(parents=True, exist_ok=True)
             img.save(str(out_path), "PNG")
             print(f"  [OK] {fname}  {cap['label']}  p.{pg}")
 
