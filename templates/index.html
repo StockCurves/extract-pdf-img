@@ -22,8 +22,16 @@
 
     <main class="main-content">
         <div id="welcome-screen" class="welcome-screen">
-            <h2>請上傳 PDF 檔案開始使用</h2>
-            <p>簡潔、高效的 PDF 頁面與投影片同步檢視工具</p>
+            <div id="drop-zone" class="drop-zone">
+                <svg class="upload-icon" xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#70757a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <h2>請上傳 PDF 檔案開始使用</h2>
+                <p>將 PDF 檔案拖曳至此處，或點擊下方按鈕上傳</p>
+                <button type="button" id="welcome-upload-btn" class="btn btn-primary" style="margin-top: 8px;">選擇 PDF 檔案</button>
+            </div>
         </div>
 
         <div id="viewer-container" class="viewer-container" style="display: none;">

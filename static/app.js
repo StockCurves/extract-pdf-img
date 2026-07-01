@@ -15,19 +15,69 @@ document.addEventListener('DOMContentLoaded', () => {
     let pngUrls = [];
     let currentIndex = 0;
 
+    const welcomeUploadBtn = document.getElementById('welcome-upload-btn');
+    const dropZone = document.getElementById('drop-zone');
+
     uploadBtn.addEventListener('click', () => {
         pdfInput.click();
     });
 
-    pdfInput.addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
+    if (welcomeUploadBtn) {
+        welcomeUploadBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            pdfInput.click();
+        });
+    }
 
+    if (dropZone) {
+        dropZone.addEventListener('click', () => {
+            pdfInput.click();
+        });
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dropZone.classList.add('dragover');
+            }, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dropZone.classList.remove('dragover');
+            }, false);
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            if (files.length > 0) {
+                const file = files[0];
+                if (file.type === "application/pdf" || file.name.toLowerCase().endsWith('.pdf')) {
+                    handleFileUpload(file);
+                } else {
+                    alert("只支援上傳 PDF 檔案");
+                }
+            }
+        });
+    }
+
+    pdfInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            handleFileUpload(file);
+        }
+    });
+
+    async function handleFileUpload(file) {
         const formData = new FormData();
         formData.append('pdf', file);
 
         loading.style.display = 'block';
         uploadBtn.disabled = true;
+        if (welcomeUploadBtn) welcomeUploadBtn.disabled = true;
 
         try {
             const response = await fetch('/upload', {
@@ -44,7 +94,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 welcomeScreen.style.display = 'none';
                 viewerContainer.style.display = 'flex';
 
-                // Initial PDF view is page 1
                 pdfFrame.src = `${pdfUrl}#page=1`;
 
                 updateSlide();
@@ -58,8 +107,10 @@ document.addEventListener('DOMContentLoaded', () => {
         } finally {
             loading.style.display = 'none';
             uploadBtn.disabled = false;
+            if (welcomeUploadBtn) welcomeUploadBtn.disabled = false;
+            pdfInput.value = '';
         }
-    });
+    }
 
     function updateSlide() {
         if (pngUrls.length === 0) return;
