@@ -12,8 +12,14 @@
             <span class="logo-text">PDF Slide Viewer</span>
         </div>
         <div class="upload-container">
-            <form id="upload-form" enctype="multipart/form-data">
+            <form id="upload-form" enctype="multipart/form-data" style="display: flex; align-items: center; gap: 16px;">
                 <input type="file" id="pdf-input" name="pdf" accept=".pdf" style="display: none;">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="caption-checkbox"> 保留 Fig. caption
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="tables-checkbox" checked> 包含 Tables 表格
+                </label>
                 <button type="button" id="upload-btn" class="btn btn-primary">選擇並上傳 PDF</button>
             </form>
             <div id="loading" class="loading" style="display: none;">處理中，請稍候...</div>

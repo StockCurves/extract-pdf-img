@@ -260,3 +260,19 @@ body {
 .thumb-item.active {
     border-color: var(--primary-color);
 }
+
+.checkbox-label {
+    font-size: 13px;
+    color: var(--text-light);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.checkbox-label input[type="checkbox"] {
+    cursor: pointer;
+    width: 14px;
+    height: 14px;
+}

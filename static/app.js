@@ -72,8 +72,15 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     async function handleFileUpload(file) {
+        const captionCheckbox = document.getElementById('caption-checkbox');
+        const tablesCheckbox = document.getElementById('tables-checkbox');
+        const addCaption = captionCheckbox ? captionCheckbox.checked : false;
+        const includeTables = tablesCheckbox ? tablesCheckbox.checked : false;
+
         const formData = new FormData();
         formData.append('pdf', file);
+        formData.append('add_caption', addCaption);
+        formData.append('include_tables', includeTables);
 
         loading.style.display = 'block';
         uploadBtn.disabled = true;

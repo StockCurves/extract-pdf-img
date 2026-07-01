@@ -56,7 +56,10 @@ def upload_file():
             from pathlib import Path
             from extract_figures import extract
             
-            results = extract(Path(pdf_path), include_tables=True, dpi=150, out_dir=Path(target_dir))
+            add_caption = request.form.get('add_caption', 'false').lower() == 'true'
+            include_tables = request.form.get('include_tables', 'false').lower() == 'true'
+            
+            results = extract(Path(pdf_path), add_caption=add_caption, include_tables=include_tables, dpi=150, out_dir=Path(target_dir))
             
             slides = []
             for r in results:
