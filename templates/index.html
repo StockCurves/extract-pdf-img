@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Slide Viewer</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header class="header">
+        <div class="logo-container">
+            <span class="logo-text">PDF Slide Viewer</span>
+        </div>
+        <div class="upload-container">
+            <form id="upload-form" enctype="multipart/form-data">
+                <input type="file" id="pdf-input" name="pdf" accept=".pdf" style="display: none;">
+                <button type="button" id="upload-btn" class="btn btn-primary">選擇並上傳 PDF</button>
+            </form>
+            <div id="loading" class="loading" style="display: none;">處理中，請稍候...</div>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <div id="welcome-screen" class="welcome-screen">
+            <h2>請上傳 PDF 檔案開始使用</h2>
+            <p>簡潔、高效的 PDF 頁面與投影片同步檢視工具</p>
+        </div>
+
+        <div id="viewer-container" class="viewer-container" style="display: none;">
+            <!-- 左側 PDF 檢視器 -->
+            <div class="panel left-panel">
+                <iframe id="pdf-frame" src="" width="100%" height="100%" frameborder="0"></iframe>
+            </div>
+
+            <!-- 分割條 -->
+            <div class="splitter"></div>
+
+            <!-- 右側 PNG 投影片 -->
+            <div class="panel right-panel">
+                <div class="slide-viewer">
+                    <div class="slide-stage">
+                        <img id="current-slide" src="" alt="Slide Image">
+                    </div>
+                    <div class="slide-controls">
+                        <button id="prev-btn" class="btn btn-secondary">上一頁</button>
+                        <span id="page-indicator">第 0 / 0 頁</span>
+                        <button id="next-btn" class="btn btn-secondary">下一頁</button>
+                    </div>
+                </div>
+                <div class="thumbnail-bar" id="thumbnail-bar">
+                    <!-- 縮圖將由 JavaScript 動態插入 -->
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
