@@ -12,7 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const thumbnailBar = document.getElementById('thumbnail-bar');
 
     let pdfUrl = '';
-    let pngUrls = [];
+    let slides = [];
     let currentIndex = 0;
 
     const welcomeUploadBtn = document.getElementById('welcome-upload-btn');
@@ -88,13 +88,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
             if (response.ok && data.status === 'success') {
                 pdfUrl = data.pdf_url;
-                pngUrls = data.png_urls;
+                slides = data.slides;
                 currentIndex = 0;
 
                 welcomeScreen.style.display = 'none';
                 viewerContainer.style.display = 'flex';
 
-                pdfFrame.src = `${pdfUrl}#page=1`;
+                pdfFrame.src = pdfUrl;
 
                 updateSlide();
                 renderThumbnails();
@@ -113,13 +113,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateSlide() {
-        if (pngUrls.length === 0) return;
-        currentSlide.src = pngUrls[currentIndex];
-        pageIndicator.textContent = `第 ${currentIndex + 1} / ${pngUrls.length} 頁`;
+        if (slides.length === 0) return;
+        const slide = slides[currentIndex];
+        currentSlide.src = slide.url;
+        pageIndicator.textContent = `${slide.label} (p.${slide.page})`;
         
         // Sync PDF view using url fragment hash
-        const targetPage = currentIndex + 1;
-        pdfFrame.contentWindow.location.replace(`${pdfUrl}#page=${targetPage}`);
+        pdfFrame.contentWindow.location.replace(`${pdfUrl}#page=${slide.page}`);
 
         // Update active class on thumbnails
         document.querySelectorAll('.thumb-item').forEach((thumb, idx) => {
@@ -134,16 +134,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderThumbnails() {
         thumbnailBar.innerHTML = '';
-        pngUrls.forEach((url, idx) => {
+        slides.forEach((slide, idx) => {
             const thumb = document.createElement('div');
             thumb.className = 'thumb-item';
             if (idx === currentIndex) thumb.classList.add('active');
 
             const img = document.createElement('img');
-            img.src = url;
-            img.alt = `Page ${idx + 1}`;
+            img.src = slide.url;
+            img.alt = slide.label;
+
+            const labelSpan = document.createElement('span');
+            labelSpan.className = 'thumb-label';
+            labelSpan.textContent = slide.label;
 
             thumb.appendChild(img);
+            thumb.appendChild(labelSpan);
+            
             thumb.addEventListener('click', () => {
                 currentIndex = idx;
                 updateSlide();
@@ -161,15 +167,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     nextBtn.addEventListener('click', () => {
-        if (currentIndex < pngUrls.length - 1) {
+        if (currentIndex < slides.length - 1) {
             currentIndex++;
             updateSlide();
         }
     });
 
-    // Keyboard support (left and right arrows)
     document.addEventListener('keydown', (e) => {
-        if (pngUrls.length === 0) return;
+        if (slides.length === 0) return;
         if (e.key === 'ArrowLeft') {
             prevBtn.click();
         } else if (e.key === 'ArrowRight') {

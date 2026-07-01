@@ -53,16 +53,34 @@ def upload_file():
         file.save(pdf_path)
         
         try:
-            convert_pdf_to_pngs(pdf_path, target_dir)
+            from pathlib import Path
+            from extract_figures import extract
             
-            # Generate static relative URLs for the frontend
-            doc = fitz.open(pdf_path)
-            png_urls = [f"/output/{dir_name}/page_{i+1}.png" for i in range(len(doc))]
+            results = extract(Path(pdf_path), include_tables=True, dpi=150, out_dir=Path(target_dir))
             
+            slides = []
+            for r in results:
+                fname = os.path.basename(r["path_str"])
+                slides.append({
+                    "url": f"/output/{dir_name}/{fname}",
+                    "label": r["label"],
+                    "page": r["page"]
+                })
+            
+            if not slides:
+                convert_pdf_to_pngs(pdf_path, target_dir)
+                doc = fitz.open(pdf_path)
+                for i in range(len(doc)):
+                    slides.append({
+                        "url": f"/output/{dir_name}/page_{i+1}.png",
+                        "label": f"Page {i+1}",
+                        "page": i + 1
+                    })
+                    
             return jsonify({
                 'status': 'success',
                 'pdf_url': f"/output/{dir_name}/{filename}",
-                'png_urls': png_urls
+                'slides': slides
             })
         except Exception as e:
             return jsonify({'error': f'Failed to process PDF: {str(e)}'}), 500
