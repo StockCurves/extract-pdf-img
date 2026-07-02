@@ -205,25 +205,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ── Cropper Logic ────────────────────────────────────────────────────────
 
-    function getImgRenderedRect(img) {
-        const imgRatio = img.naturalWidth / img.naturalHeight;
-        const containerWidth = img.clientWidth;
-        const containerHeight = img.clientHeight;
-        const containerRatio = containerWidth / containerHeight;
-        
-        let w, h, x, y;
-        if (imgRatio > containerRatio) {
-            w = containerWidth;
-            h = containerWidth / imgRatio;
-            x = 0;
-            y = (containerHeight - h) / 2;
-        } else {
-            w = containerHeight * imgRatio;
-            h = containerHeight;
-            x = (containerWidth - w) / 2;
-            y = 0;
-        }
-        return { x, y, width: w, height: h };
+    function alignCropOverlay() {
+        if (!currentSlide || !cropOverlay) return;
+        cropOverlay.style.left = `${currentSlide.offsetLeft}px`;
+        cropOverlay.style.top = `${currentSlide.offsetTop}px`;
+        cropOverlay.style.width = `${currentSlide.offsetWidth}px`;
+        cropOverlay.style.height = `${currentSlide.offsetHeight}px`;
     }
 
     function enterCropMode() {
@@ -232,13 +219,10 @@ document.addEventListener('DOMContentLoaded', () => {
         cropModeBtn.textContent = '取消編輯';
         cropApplyBtn.style.display = 'block';
         cropOverlay.style.display = 'block';
+        cropOverlay.style.backgroundColor = 'rgba(0, 0, 0, 0.5)'; // Darken image initially
         cropSelection.style.display = 'none';
         
-        const rect = getImgRenderedRect(currentSlide);
-        cropOverlay.style.left = `${rect.x}px`;
-        cropOverlay.style.top = `${rect.y}px`;
-        cropOverlay.style.width = `${rect.width}px`;
-        cropOverlay.style.height = `${rect.height}px`;
+        alignCropOverlay();
         
         selectionBox = { left: 0, top: 0, width: 0, height: 0 };
     }
@@ -247,7 +231,10 @@ document.addEventListener('DOMContentLoaded', () => {
         isCropMode = false;
         if (cropModeBtn) cropModeBtn.textContent = '編輯裁切';
         if (cropApplyBtn) cropApplyBtn.style.display = 'none';
-        if (cropOverlay) cropOverlay.style.display = 'none';
+        if (cropOverlay) {
+            cropOverlay.style.display = 'none';
+            cropOverlay.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+        }
         if (cropSelection) cropSelection.style.display = 'none';
     }
 
@@ -267,6 +254,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const rect = cropOverlay.getBoundingClientRect();
             startX = e.clientX - rect.left;
             startY = e.clientY - rect.top;
+            
+            // Clear overall dark overlay and let selection's box-shadow darken the outer region
+            cropOverlay.style.backgroundColor = 'transparent';
             
             cropSelection.style.left = `${startX}px`;
             cropSelection.style.top = `${startY}px`;
@@ -338,13 +328,15 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    currentSlide.addEventListener('load', () => {
+        if (isCropMode && cropOverlay.style.display === 'block') {
+            alignCropOverlay();
+        }
+    });
+
     window.addEventListener('resize', () => {
         if (isCropMode && cropOverlay.style.display === 'block') {
-            const rect = getImgRenderedRect(currentSlide);
-            cropOverlay.style.left = `${rect.x}px`;
-            cropOverlay.style.top = `${rect.y}px`;
-            cropOverlay.style.width = `${rect.width}px`;
-            cropOverlay.style.height = `${rect.height}px`;
+            alignCropOverlay();
         }
     });
 });

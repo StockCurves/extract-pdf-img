@@ -283,14 +283,15 @@ body {
     cursor: crosshair;
     user-select: none;
     z-index: 5;
-    background: transparent;
+    background-color: rgba(0, 0, 0, 0.5); /* Initially darken the whole image */
     display: none;
+    overflow: hidden;
+    transition: background-color 0.15s ease;
 }
 
 .crop-selection {
     position: absolute;
-    border: 1px dashed var(--primary-color);
-    background-color: rgba(26, 115, 232, 0.15);
-    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.3); /* Darkens region outside crop selection */
+    border: 1px dashed #ffffff; /* White dashed border for high contrast */
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5); /* Darkens region outside selection, making selected area look bright */
     pointer-events: none;
 }
