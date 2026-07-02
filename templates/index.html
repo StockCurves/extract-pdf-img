@@ -52,13 +52,20 @@
             <!-- 右側 PNG 投影片 -->
             <div class="panel right-panel">
                 <div class="slide-viewer">
-                    <div class="slide-stage">
+                    <div class="slide-stage" id="slide-stage">
                         <img id="current-slide" src="" alt="Slide Image">
+                        <div id="crop-overlay" class="crop-overlay">
+                            <div id="crop-selection" class="crop-selection" style="display: none;"></div>
+                        </div>
                     </div>
                     <div class="slide-controls">
                         <button id="prev-btn" class="btn btn-secondary">上一頁</button>
                         <span id="page-indicator">第 0 / 0 頁</span>
                         <button id="next-btn" class="btn btn-secondary">下一頁</button>
+                        <div style="border-left: 1px solid var(--border-color); height: 24px; margin: 0 8px;"></div>
+                        <button id="crop-mode-btn" class="btn btn-secondary">編輯裁切</button>
+                        <button id="crop-apply-btn" class="btn btn-primary" style="display: none;">套用裁切</button>
+                        <button id="crop-reset-btn" class="btn btn-secondary" style="display: none;">復原</button>
                     </div>
                 </div>
                 <div class="thumbnail-bar" id="thumbnail-bar">

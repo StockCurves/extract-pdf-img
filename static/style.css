@@ -276,3 +276,21 @@ body {
     width: 14px;
     height: 14px;
 }
+
+/* Crop tool styles */
+.crop-overlay {
+    position: absolute;
+    cursor: crosshair;
+    user-select: none;
+    z-index: 5;
+    background: transparent;
+    display: none;
+}
+
+.crop-selection {
+    position: absolute;
+    border: 1px dashed var(--primary-color);
+    background-color: rgba(26, 115, 232, 0.15);
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.3); /* Darkens region outside crop selection */
+    pointer-events: none;
+}
