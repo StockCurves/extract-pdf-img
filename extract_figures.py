@@ -31,8 +31,13 @@ PAGE_MARGIN_BOTTOM = 36   # pt  – skip footer band
 PAGE_MARGIN_SIDE   = 36   # pt  – left/right page margin
 
 # ── Caption detection patterns ────────────────────────────────────────────────
-# True figure caption: "Fig. 3." or "Figure 3." — number followed by a period
-_FIG_PAT = re.compile(r'^(Fig(?:ure)?\.?\s*\d+\.)', re.IGNORECASE)
+# True figure caption labels:
+#   "Fig. 3. ..." / "Figure 3.5.1: ..."
+# Body references such as "Figure 3.5.1 shows ..." must not match.
+_FIG_PAT = re.compile(
+    r'^(Fig(?:ure)?\.?\s*\d+(?:\.\d+)*(?:\.|:))(?=\s|$)',
+    re.IGNORECASE,
+)
 
 # True table caption: "TABLE I" or "TABLE 1" as a standalone label line
 _TBL_PAT = re.compile(r'^(TABLE\s+[IVXivx\d]+)\s*$', re.IGNORECASE)
@@ -58,7 +63,55 @@ def _classify_col(bx0: float, bx1: float, pw: float) -> str:
     # Full-width: starts in left-col territory and ends beyond midpoint
     if bx0 < mid - 20 and bx1 > mid + 8:
         return "full"
-    return "left" if bx0 < mid else "right"
+    if bx0 > mid - 15:
+        return "right"
+    if bx1 < mid + 15:
+        return "left"
+    return "left" if (bx0 + bx1)/2 < mid else "right"
+
+
+def _rect_to_list(rect: fitz.Rect | None) -> list[float] | None:
+    if rect is None:
+        return None
+    return [float(rect.x0), float(rect.y0), float(rect.x1), float(rect.y1)]
+
+
+def _union_rects(rects: list[fitz.Rect]) -> fitz.Rect | None:
+    if not rects:
+        return None
+    out = fitz.Rect(rects[0])
+    for rect in rects[1:]:
+        out |= rect
+    return out
+
+
+def _graphics_bbox_in_rect(page: fitz.Page, crop: fitz.Rect) -> fitz.Rect | None:
+    """Return the union of graphic/image bounds intersecting the crop."""
+    rects: list[fitz.Rect] = []
+
+    for drawing in page.get_drawings():
+        rect = drawing.get("rect", fitz.Rect())
+        if rect.is_empty or rect.width < 3 or rect.height < 3:
+            continue
+        clipped = fitz.Rect(rect) & crop
+        if clipped.is_empty:
+            continue
+        rects.append(clipped)
+
+    for img_info in page.get_images(full=True):
+        try:
+            image_rects = page.get_image_rects(img_info[0])
+        except Exception:
+            continue
+        for rect in image_rects:
+            if rect.width < 10 or rect.height < 10:
+                continue
+            clipped = fitz.Rect(rect) & crop
+            if clipped.is_empty:
+                continue
+            rects.append(clipped)
+
+    return _union_rects(rects)
 
 
 # ── Caption finding ───────────────────────────────────────────────────────────
@@ -74,36 +127,65 @@ def get_captions(page: fitz.Page, include_tables: bool = True) -> list[dict]:
     pw = page.rect.width
     results: list[dict] = []
 
-    for b in page.get_text("blocks"):
-        x0, y0, x1, y1, text, _bno, btype = b
-        if btype != 0:          # skip image-type blocks
-            continue
-        lines = [l.strip() for l in text.strip().splitlines() if l.strip()]
-        if not lines:
-            continue
-        first = lines[0]
-
-        m = _FIG_PAT.match(first)
-        if m:
-            results.append({
-                "type":      "figure",
-                "label":     m.group(1),
-                "full_text": " ".join(lines),
-                "bbox":      fitz.Rect(x0, y0, x1, y1),
-                "col":       _classify_col(x0, x1, pw),
-            })
+    text_dict = page.get_text("dict")
+    for block in text_dict["blocks"]:
+        if "lines" not in block:
             continue
 
-        if include_tables:
-            m = _TBL_PAT.match(first)
-            if m:
-                results.append({
-                    "type":      "table",
-                    "label":     m.group(1),
-                    "full_text": " ".join(lines),
-                    "bbox":      fitz.Rect(x0, y0, x1, y1),
-                    "col":       _classify_col(x0, x1, pw),
+        # Check if the block starts with a caption pattern (if not, it is body text)
+        first_line_text = ""
+        for line in block["lines"]:
+            first_line_text = "".join(span["text"] for span in line["spans"]).strip()
+            if first_line_text:
+                break
+        if not first_line_text:
+            continue
+
+        is_caption_block = bool(_FIG_PAT.match(first_line_text) or (_TBL_PAT.match(first_line_text) if include_tables else False))
+        if not is_caption_block:
+            continue
+
+        current_captions = []
+
+        for line in block["lines"]:
+            line_text = "".join(span["text"] for span in line["spans"]).strip()
+            if not line_text:
+                continue
+
+            fig_match = _FIG_PAT.match(line_text)
+            tbl_match = _TBL_PAT.match(line_text) if include_tables else None
+
+            if fig_match:
+                current_captions.append({
+                    "type": "figure",
+                    "label": fig_match.group(1),
+                    "lines": [line],
+                    "line_texts": [line_text],
                 })
+            elif tbl_match:
+                current_captions.append({
+                    "type": "table",
+                    "label": tbl_match.group(1),
+                    "lines": [line],
+                    "line_texts": [line_text],
+                })
+            else:
+                if current_captions:
+                    current_captions[-1]["lines"].append(line)
+                    current_captions[-1]["line_texts"].append(line_text)
+
+        for cap in current_captions:
+            union_bbox = fitz.Rect(cap["lines"][0]["bbox"])
+            for line in cap["lines"][1:]:
+                union_bbox |= fitz.Rect(line["bbox"])
+
+            results.append({
+                "type":      cap["type"],
+                "label":     cap["label"],
+                "full_text": " ".join(cap["line_texts"]),
+                "bbox":      union_bbox,
+                "col":       _classify_col(union_bbox.x0, union_bbox.x1, pw),
+            })
 
     return results
 
@@ -379,6 +461,8 @@ def extract(pdf_path: Path,
             # Apply padding
             rect = fitz.Rect(rect.x0 - padding, rect.y0 - padding,
                              rect.x1 + padding, rect.y1 + padding)
+            rect = rect & page.rect
+            graphics_bbox = _graphics_bbox_in_rect(page, rect)
 
             img = render_crop(page, rect, dpi=dpi)
 
@@ -402,13 +486,19 @@ def extract(pdf_path: Path,
             print(f"  [OK] {fname}  {cap['label']}  p.{pg}")
 
             results.append({
-                "path":    out_path,
-                "label":   cap["label"],
-                "type":    cap["type"],
-                "page":    pg,
-                "width":   img.width,
-                "height":  img.height,
-                "col":     cap["col"],
+                "path":         out_path,
+                "path_str":     str(out_path),
+                "label":        cap["label"],
+                "type":         cap["type"],
+                "page":         pg,
+                "width":        img.width,
+                "height":       img.height,
+                "col":          cap["col"],
+                "col_detected": cap["col"],
+                "rect_pt":      _rect_to_list(rect),
+                "caption_bbox": _rect_to_list(cap["bbox"]),
+                "graphics_bbox": _rect_to_list(graphics_bbox),
+                "full_text":    cap["full_text"],
             })
 
     pdf.close()

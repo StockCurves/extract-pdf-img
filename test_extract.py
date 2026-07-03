@@ -30,6 +30,7 @@ import numpy as np
 # Import the extractor so we can call it directly
 sys.path.insert(0, str(Path(__file__).parent))
 from extract_figures import extract
+from verify_crops import save_metadata, verify_results, write_overlays, write_reports
 
 # ── Config ────────────────────────────────────────────────────────────────────
 MIN_WIDTH_PX  = 100    # smallest plausible figure width at 300 dpi
@@ -146,6 +147,10 @@ def main():
     ap.add_argument("--dpi",           type=int, default=300)
     ap.add_argument("--contact-sheet", action="store_true",
                     help="Save a contact-sheet PNG of all crops")
+    ap.add_argument("--qa",            action="store_true",
+                    help="Write crop QA metadata and reports")
+    ap.add_argument("--qa-overlay",    action="store_true",
+                    help="With --qa, write page overlays for suspicious crops")
     ap.add_argument("--expected-figs", type=int, default=None,
                     help="Expected number of figure PNGs (for count assertion)")
     args = ap.parse_args()
@@ -218,6 +223,26 @@ def main():
     if args.contact_sheet and results:
         cs_path = out_dir / f"{pdf_path.stem}-contact-sheet.png"
         make_contact_sheet(results, cs_path)
+
+    if args.qa and results:
+        metadata_path = out_dir / "extract_metadata.json"
+        save_metadata(results, metadata_path)
+        report = verify_results(pdf_path, results)
+        json_path, txt_path = write_reports(report, out_dir)
+        print(f"  QA metadata -> {metadata_path}")
+        print(f"  QA JSON -> {json_path}")
+        print(f"  QA text -> {txt_path}")
+        print(
+            "  QA summary -> "
+            f"pass={report['summary']['pass']} "
+            f"warn={report['summary']['warn']} "
+            f"fail={report['summary']['fail']}"
+        )
+        if args.qa_overlay:
+            overlay_paths = write_overlays(pdf_path, report, out_dir)
+            print(f"  QA overlays -> {len(overlay_paths)} files")
+        if report["summary"]["fail"]:
+            failed += report["summary"]["fail"]
 
     # Final summary
     total = passed + failed

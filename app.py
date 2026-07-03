@@ -1,5 +1,7 @@
 import os
 import re
+import shutil
+from pathlib import Path
 from flask import Flask, request, jsonify, render_template, send_from_directory
 from werkzeug.utils import secure_filename
 import fitz  # PyMuPDF
@@ -7,6 +9,8 @@ import fitz  # PyMuPDF
 app = Flask(__name__, template_folder='templates', static_folder='static')
 UPLOAD_FOLDER = 'output'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+BASE_DIR = Path(__file__).resolve().parent
+ICON_DIR = BASE_DIR / 'icon01'
 
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
@@ -28,6 +32,25 @@ def convert_pdf_to_pngs(pdf_path, target_dir):
         pix.save(png_path)
         png_paths.append(png_path)
     return png_paths
+
+def output_url_for_path(path):
+    rel_path = Path(path).resolve().relative_to((BASE_DIR / app.config['UPLOAD_FOLDER']).resolve())
+    return f"/output/{rel_path.as_posix()}"
+
+@app.context_processor
+def inject_asset_version():
+    def asset_version(path):
+        asset_path = BASE_DIR / path
+        if not asset_path.exists():
+            return "missing"
+        return str(int(asset_path.stat().st_mtime))
+    return {"asset_version": asset_version}
+
+@app.after_request
+def disable_dynamic_asset_cache(response):
+    if request.endpoint in {"index", "static", "serve_output", "serve_icon01"}:
+        response.headers["Cache-Control"] = "no-store, max-age=0"
+    return response
 
 @app.route('/')
 def index():
@@ -53,29 +76,33 @@ def upload_file():
         file.save(pdf_path)
         
         try:
-            from pathlib import Path
             from extract_figures import extract
             
             add_caption = request.form.get('add_caption', 'false').lower() == 'true'
             include_tables = request.form.get('include_tables', 'false').lower() == 'true'
             
-            results = extract(Path(pdf_path), add_caption=add_caption, include_tables=include_tables, dpi=150, out_dir=Path(target_dir))
+            pdf_path_obj = Path(pdf_path)
+            asset_dir = pdf_path_obj.parent / f"{pdf_path_obj.stem}-png"
+            if asset_dir.exists():
+                shutil.rmtree(asset_dir)
+
+            results = extract(pdf_path_obj, add_caption=add_caption, include_tables=include_tables, dpi=150)
             
             slides = []
             for r in results:
-                fname = os.path.basename(r["path_str"])
                 slides.append({
-                    "url": f"/output/{dir_name}/{fname}",
+                    "url": output_url_for_path(r["path_str"]),
                     "label": r["label"],
                     "page": r["page"]
                 })
             
             if not slides:
-                convert_pdf_to_pngs(pdf_path, target_dir)
+                asset_dir.mkdir(parents=True, exist_ok=True)
+                convert_pdf_to_pngs(pdf_path, asset_dir)
                 doc = fitz.open(pdf_path)
                 for i in range(len(doc)):
                     slides.append({
-                        "url": f"/output/{dir_name}/page_{i+1}.png",
+                        "url": output_url_for_path(asset_dir / f"page_{i+1}.png"),
                         "label": f"Page {i+1}",
                         "page": i + 1
                     })
@@ -94,5 +121,9 @@ def upload_file():
 def serve_output(filepath):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filepath)
 
+@app.route('/icon01/<path:filepath>')
+def serve_icon01(filepath):
+    return send_from_directory(ICON_DIR, filepath)
+
 if __name__ == '__main__':
-    app.run(debug=True, use_reloader=False, port=5000)
+    app.run(debug=False, use_reloader=False, port=5000)

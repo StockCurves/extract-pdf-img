@@ -3,26 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PDF Slide Viewer</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <title>Extract Figures From PDF</title>
+    <link rel="icon" type="image/svg+xml" href="/icon01/favicon.svg?v={{ asset_version('icon01/favicon.svg') }}">
+    <link rel="alternate icon" type="image/png" href="/icon01/favicon.ico?v={{ asset_version('icon01/favicon.ico') }}">
+    <link rel="apple-touch-icon" href="/icon01/apple-icon-180x180.png?v={{ asset_version('icon01/apple-icon-180x180.png') }}">
+    <link rel="stylesheet" href="/static/style.css?v={{ asset_version('static/style.css') }}">
 </head>
 <body>
     <header class="header">
         <div class="logo-container">
-            <span class="logo-text">PDF Slide Viewer</span>
+            <img src="/icon01/favicon.svg" alt="Logo" class="logo-icon">
+            <span class="logo-text" id="app-title">Extract Figures From PDF</span>
         </div>
         <div class="upload-container">
             <form id="upload-form" enctype="multipart/form-data" style="display: flex; align-items: center; gap: 16px;">
                 <input type="file" id="pdf-input" name="pdf" accept=".pdf" style="display: none;">
                 <label class="checkbox-label">
-                    <input type="checkbox" id="caption-checkbox"> 保留 Fig. caption
-                </label>
-                <label class="checkbox-label">
                     <input type="checkbox" id="tables-checkbox" checked> 包含 Tables 表格
                 </label>
                 <button type="button" id="upload-btn" class="btn btn-primary">選擇並上傳 PDF</button>
             </form>
-            <div id="loading" class="loading" style="display: none;">處理中，請稍候...</div>
         </div>
     </header>
 
@@ -38,6 +38,7 @@
                 <p>將 PDF 檔案拖曳至此處，或點擊下方按鈕上傳</p>
                 <button type="button" id="welcome-upload-btn" class="btn btn-primary" style="margin-top: 8px;">選擇 PDF 檔案</button>
             </div>
+            <div id="loading" class="loading-center" style="display: none;">處理中，請稍候...</div>
         </div>
 
         <div id="viewer-container" class="viewer-container" style="display: none;">
@@ -52,6 +53,7 @@
             <!-- 右側 PNG 投影片 -->
             <div class="panel right-panel">
                 <div class="slide-viewer">
+                    <div id="page-position-indicator" class="page-position-indicator">0 / 0</div>
                     <div class="slide-stage" id="slide-stage">
                         <img id="current-slide" src="" alt="Slide Image">
                         <div id="crop-overlay" class="crop-overlay">
@@ -66,6 +68,9 @@
                         <button id="crop-mode-btn" class="btn btn-secondary">編輯裁切</button>
                         <button id="crop-apply-btn" class="btn btn-primary" style="display: none;">套用裁切</button>
                         <button id="crop-reset-btn" class="btn btn-secondary" style="display: none;">復原</button>
+                        <div style="border-left: 1px solid var(--border-color); height: 24px; margin: 0 8px;"></div>
+                        <button id="select-all-btn" class="btn btn-secondary">全選</button>
+                        <button id="download-zip-btn" class="btn btn-primary">下載 ZIP 打包 (0)</button>
                     </div>
                 </div>
                 <div class="thumbnail-bar" id="thumbnail-bar">
@@ -75,6 +80,7 @@
         </div>
     </main>
 
-    <script src="/static/app.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="/static/app.js?v={{ asset_version('static/app.js') }}"></script>
 </body>
 </html>

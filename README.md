@@ -53,6 +53,21 @@ python test_extract.py sample.pdf --expected-figs 19 --tables
 ```
 This script will run the extraction and then verify the dimensions, column detection, and exact counts of the exported assets.
 
+To also produce report-only crop QA for column coverage, crop overlap/merge
+signals, and extra text inside crops:
+
+```bash
+python test_extract.py sample.pdf --tables --qa --qa-overlay
+```
+
+This writes `extract_metadata.json`, `qa_report.json`, `qa_report.txt`, and
+optional page overlays into the output directory. If metadata already exists,
+run the verifier without re-extracting crops:
+
+```bash
+python verify_crops.py sample.pdf --metadata sample-png/extract_metadata.json --overlay
+```
+
 ## Architecture & Logic
 The core engine (`extract_figures.py`) operates in several phases:
 1. **Caption Parsing**: Identifies all text blocks matching "Fig. X" or "TABLE X", determining their initial column placement (left, right, or full) based on page coordinates.

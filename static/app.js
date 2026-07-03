@@ -1,4 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
+    const appTitle = 'Extract Figures From PDF';
     const uploadBtn = document.getElementById('upload-btn');
     const pdfInput = document.getElementById('pdf-input');
     const loading = document.getElementById('loading');
@@ -9,11 +10,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const prevBtn = document.getElementById('prev-btn');
     const nextBtn = document.getElementById('next-btn');
     const pageIndicator = document.getElementById('page-indicator');
+    const pagePositionIndicator = document.getElementById('page-position-indicator');
     const thumbnailBar = document.getElementById('thumbnail-bar');
+    const appTitleEl = document.getElementById('app-title');
 
     let pdfUrl = '';
     let slides = [];
     let currentIndex = 0;
+    let currentPdfName = '';
+
+    const selectAllBtn = document.getElementById('select-all-btn');
+    const downloadZipBtn = document.getElementById('download-zip-btn');
 
     const cropModeBtn = document.getElementById('crop-mode-btn');
     const cropApplyBtn = document.getElementById('crop-apply-btn');
@@ -28,6 +35,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const welcomeUploadBtn = document.getElementById('welcome-upload-btn');
     const dropZone = document.getElementById('drop-zone');
+
+    function setAppTitle(fileName = '') {
+        const title = fileName ? `${appTitle} - ${fileName}` : appTitle;
+        document.title = title;
+        if (appTitleEl) {
+            appTitleEl.textContent = title;
+        }
+    }
 
     uploadBtn.addEventListener('click', () => {
         pdfInput.click();
@@ -83,9 +98,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     async function handleFileUpload(file) {
-        const captionCheckbox = document.getElementById('caption-checkbox');
         const tablesCheckbox = document.getElementById('tables-checkbox');
-        const addCaption = captionCheckbox ? captionCheckbox.checked : false;
+        const addCaption = false;
         const includeTables = tablesCheckbox ? tablesCheckbox.checked : false;
 
         const formData = new FormData();
@@ -106,7 +120,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
             if (response.ok && data.status === 'success') {
                 pdfUrl = data.pdf_url;
-                slides = data.slides;
+                currentPdfName = file.name.replace(/\.[^/.]+$/, "");
+                setAppTitle(file.name);
+                slides = data.slides.map(slide => ({ ...slide, selected: true }));
                 currentIndex = 0;
 
                 welcomeScreen.style.display = 'none';
@@ -116,6 +132,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 updateSlide();
                 renderThumbnails();
+                updateDownloadButtonCount();
             } else {
                 alert(data.error || '上傳失敗');
             }
@@ -135,6 +152,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const slide = slides[currentIndex];
         currentSlide.src = slide.url;
         pageIndicator.textContent = `${slide.label} (p.${slide.page})`;
+        if (pagePositionIndicator) {
+            pagePositionIndicator.textContent = `${currentIndex + 1} / ${slides.length}`;
+        }
         
         // Sync PDF view using url fragment hash
         pdfFrame.contentWindow.location.replace(`${pdfUrl}#page=${slide.page}`);
@@ -168,8 +188,23 @@ document.addEventListener('DOMContentLoaded', () => {
             labelSpan.className = 'thumb-label';
             labelSpan.textContent = slide.label;
 
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'thumb-checkbox';
+            checkbox.checked = slide.selected !== false;
+
+            checkbox.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
+
+            checkbox.addEventListener('change', (e) => {
+                slide.selected = e.target.checked;
+                updateDownloadButtonCount();
+            });
+
             thumb.appendChild(img);
             thumb.appendChild(labelSpan);
+            thumb.appendChild(checkbox);
             
             thumb.addEventListener('click', () => {
                 currentIndex = idx;
@@ -310,10 +345,17 @@ document.addEventListener('DOMContentLoaded', () => {
             canvas.width = sw;
             canvas.height = sh;
             const ctx = canvas.getContext('2d');
-            
             ctx.drawImage(currentSlide, sx, sy, sw, sh, 0, 0, sw, sh);
             
-            currentSlide.src = canvas.toDataURL();
+            const dataUrl = canvas.toDataURL();
+            currentSlide.src = dataUrl;
+            if (slides.length > 0) {
+                slides[currentIndex].url = dataUrl;
+                const activeThumbImg = document.querySelector('.thumb-item.active img');
+                if (activeThumbImg) {
+                    activeThumbImg.src = dataUrl;
+                }
+            }
             cropResetBtn.style.display = 'block';
             exitCropMode();
         });
@@ -333,10 +375,87 @@ document.addEventListener('DOMContentLoaded', () => {
             alignCropOverlay();
         }
     });
-
     window.addEventListener('resize', () => {
         if (isCropMode && cropOverlay.style.display === 'block') {
             alignCropOverlay();
         }
     });
+
+    function updateDownloadButtonCount() {
+        const selectedCount = slides.filter(s => s.selected !== false).length;
+        if (downloadZipBtn) {
+            downloadZipBtn.textContent = `下載 ZIP 打包 (${selectedCount})`;
+            downloadZipBtn.disabled = selectedCount === 0;
+        }
+        if (selectAllBtn && slides.length > 0) {
+            const allSelected = slides.every(s => s.selected !== false);
+            selectAllBtn.textContent = allSelected ? '取消全選' : '全選';
+        }
+    }
+
+    if (selectAllBtn) {
+        selectAllBtn.addEventListener('click', () => {
+            const allSelected = slides.every(s => s.selected !== false);
+            slides.forEach(s => s.selected = !allSelected);
+            
+            // 更新 DOM 中所有的 checkboxes
+            document.querySelectorAll('.thumb-checkbox').forEach((cb, idx) => {
+                cb.checked = slides[idx].selected;
+            });
+            
+            updateDownloadButtonCount();
+        });
+    }
+
+    if (downloadZipBtn) {
+        downloadZipBtn.addEventListener('click', async () => {
+            const selectedSlides = slides.filter(s => s.selected !== false);
+            if (selectedSlides.length === 0) return;
+            
+            const originalText = downloadZipBtn.textContent;
+            downloadZipBtn.textContent = '打包中...';
+            downloadZipBtn.disabled = true;
+            
+            const zip = new JSZip();
+            
+            try {
+                for (let i = 0; i < selectedSlides.length; i++) {
+                    const slide = selectedSlides[i];
+                    let blob;
+                    if (slide.url.startsWith('data:')) {
+                        blob = dataURLtoBlob(slide.url);
+                    } else {
+                        const res = await fetch(slide.url);
+                        blob = await res.blob();
+                    }
+                    const safeLabel = (slide.label || `image_${i+1}`).replace(/[\\\/:*?"<>|]/g, "_");
+                    zip.file(`${safeLabel}.png`, blob);
+                }
+                
+                const content = await zip.generateAsync({ type: 'blob' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(content);
+                link.download = `${currentPdfName || 'extracted_images'}.zip`;
+                link.click();
+                URL.revokeObjectURL(link.href);
+            } catch (err) {
+                console.error(err);
+                alert('下載打包失敗，請重試！');
+            } finally {
+                downloadZipBtn.disabled = false;
+                updateDownloadButtonCount();
+            }
+        });
+    }
+
+    function dataURLtoBlob(dataurl) {
+        var arr = dataurl.split(','), mime = arr[0].match(/:(.*?);/)[1],
+            bstr = atob(arr[1]), n = bstr.length, u8arr = new Uint8Array(n);
+        while(n--){
+            u8arr[n] = bstr.charCodeAt(n);
+        }
+        return new Blob([u8arr], {type:mime});
+    }
+
+    updateDownloadButtonCount();
 });

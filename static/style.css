@@ -36,10 +36,26 @@ body {
     z-index: 10;
 }
 
+.logo-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.logo-icon {
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+}
+
 .logo-text {
     font-size: 20px;
     font-weight: 500;
     color: var(--text-color);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .upload-container {
@@ -178,6 +194,24 @@ body {
     justify-content: center;
     padding: 24px;
     overflow: hidden;
+    position: relative;
+}
+
+.page-position-indicator {
+    position: absolute;
+    top: 16px;
+    right: 24px;
+    z-index: 2;
+    min-width: 56px;
+    padding: 4px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background-color: rgba(255, 255, 255, 0.92);
+    color: var(--text-light);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.4;
+    text-align: center;
 }
 
 .slide-stage {
@@ -225,8 +259,9 @@ body {
 }
 
 .thumb-item {
+    flex-shrink: 0;
     height: 100%;
-    aspect-ratio: 1 / 1.414;
+    aspect-ratio: 1.8 / 1.414;
     border: 2px solid var(--border-color);
     cursor: pointer;
     border-radius: 2px;
@@ -294,4 +329,43 @@ body {
     border: 1px dashed #ffffff; /* White dashed border for high contrast */
     box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5); /* Darkens region outside selection, making selected area look bright */
     pointer-events: none;
+}
+
+/* Custom scrollbar for thumbnail-bar */
+.thumbnail-bar::-webkit-scrollbar {
+    height: 8px;
+}
+
+.thumbnail-bar::-webkit-scrollbar-track {
+    background: #f1f3f4;
+    border-radius: 4px;
+}
+
+.thumbnail-bar::-webkit-scrollbar-thumb {
+    background: #dadce0;
+    border-radius: 4px;
+}
+
+.thumbnail-bar::-webkit-scrollbar-thumb:hover {
+    background: #bdc1c6;
+}
+
+/* Checkbox on top-right of each thumbnail */
+.thumb-checkbox {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 18px;
+    height: 18px;
+    z-index: 10;
+    cursor: pointer;
+    accent-color: var(--primary-color);
+}
+
+.loading-center {
+    text-align: center;
+    margin-top: 24px;
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--primary-color);
 }
