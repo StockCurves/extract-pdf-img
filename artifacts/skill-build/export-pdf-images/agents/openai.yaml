@@ -1,0 +1,4 @@
+interface:
+  display_name: "Export PDF Images"
+  short_description: "Extract PNG figures from academic PDFs"
+  default_prompt: "Use $export-pdf-images to export PNG figures from a PDF and confirm cropping, output directory, and filename choices first."
