@@ -45,6 +45,17 @@ python extract_figures.py sample.pdf
 python extract_figures.py sample.pdf --tables
 ```
 
+**Extract figures without the `Fig.` caption area:**
+```bash
+python extract_figures.py sample.pdf --exclude-figure-captions
+```
+
+**Run the web app locally:**
+```bash
+python app.py
+```
+Then open `http://127.0.0.1:5000`.
+
 ### Test Suite
 To verify the extraction logic against expected outputs (useful for regression testing during development), use the included `test_extract.py` utility:
 
@@ -67,6 +78,65 @@ run the verifier without re-extracting crops:
 ```bash
 python verify_crops.py sample.pdf --metadata sample-png/extract_metadata.json --overlay
 ```
+
+For curated fixture PDFs that are checked into this repo, see
+[docs/workflows.md](docs/workflows.md).
+
+## Project Layout
+
+```text
+src/extract_png_from_pdf/  Core Flask app and extraction logic
+tests/unit/                Automated unit tests
+tests/fixtures/            Sample PDFs and checked-in fixture outputs
+tools/qa/                  QA and verification helper scripts
+tools/debug/               One-off debug and inspection scripts
+docs/                      Project structure and workflow notes
+artifacts/output/          Runtime extraction output
+artifacts/debug/           Saved debug text dumps
+artifacts/logs/            Local server logs
+artifacts/review/          Manual review images
+```
+
+## Common Paths
+
+- `src/extract_png_from_pdf/app.py`: Flask entry and runtime output routing
+- `src/extract_png_from_pdf/extract_figures.py`: extraction engine
+- `src/extract_png_from_pdf/verify_crops.py`: report-only crop QA
+- `tests/unit/`: fast unit tests
+- `tests/fixtures/pdf_samples/`: checked-in sample PDFs and expected artifacts
+- `artifacts/output/`: local extraction results from current runs
+- `artifacts/output/legacy_output/`: older preserved outputs kept for reference
+
+## Common Workflows
+
+Run unit tests:
+
+```bash
+python -m unittest discover -s tests/unit
+```
+
+Run extraction QA on a checked-in sample:
+
+```bash
+python test_extract.py tests/fixtures/pdf_samples/07533501_p5.pdf --qa --qa-overlay
+```
+
+Run the standalone verifier against saved metadata:
+
+```bash
+python verify_crops.py ^
+  tests/fixtures/pdf_samples/07533501_p5.pdf ^
+  --metadata tests/fixtures/pdf_samples/07533501_p5-png/extract_metadata.json ^
+  --overlay
+```
+
+Use the helper scripts in `tools/` when you need extra inspection:
+
+- `tools/qa/`: scripted validation, QA runs, and external compile experiments
+- `tools/debug/`: ad hoc geometry / region inspection during bug hunts
+
+More detail is in [docs/project-structure.md](docs/project-structure.md) and
+[docs/workflows.md](docs/workflows.md).
 
 ## Architecture & Logic
 The core engine (`extract_figures.py`) operates in several phases:

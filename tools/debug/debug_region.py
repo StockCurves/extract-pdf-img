@@ -1,7 +1,15 @@
 import fitz
-from extract_figures import get_captions, find_figure_region
+from pathlib import Path
+import sys
 
-pdf = fitz.open('07533501.pdf')
+ROOT_DIR = Path(__file__).resolve().parents[1]
+SRC_DIR = ROOT_DIR / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+
+from extract_png_from_pdf.extract_figures import get_captions, find_figure_region
+
+pdf = fitz.open(str(ROOT_DIR / "artifacts" / "output" / "legacy_output" / "07533501" / "07533501.pdf"))
 
 for pn in [7, 8]:  # pages 8 and 9
     page = pdf[pn]

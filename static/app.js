@@ -13,28 +13,30 @@ document.addEventListener('DOMContentLoaded', () => {
     const pagePositionIndicator = document.getElementById('page-position-indicator');
     const thumbnailBar = document.getElementById('thumbnail-bar');
     const appTitleEl = document.getElementById('app-title');
-
-    let pdfUrl = '';
-    let slides = [];
-    let currentIndex = 0;
-    let currentPdfName = '';
-
     const selectAllBtn = document.getElementById('select-all-btn');
     const downloadZipBtn = document.getElementById('download-zip-btn');
-
     const cropModeBtn = document.getElementById('crop-mode-btn');
     const cropApplyBtn = document.getElementById('crop-apply-btn');
     const cropResetBtn = document.getElementById('crop-reset-btn');
     const cropOverlay = document.getElementById('crop-overlay');
     const cropSelection = document.getElementById('crop-selection');
-    
-    let isCropMode = false;
-    let isDrawing = false;
-    let startX = 0, startY = 0;
-    let selectionBox = { left: 0, top: 0, width: 0, height: 0 };
-
     const welcomeUploadBtn = document.getElementById('welcome-upload-btn');
     const dropZone = document.getElementById('drop-zone');
+
+    let pdfUrl = '';
+    let slides = [];
+    let currentIndex = 0;
+    let currentPdfName = '';
+    let currentJobId = null;
+    let jobPollTimer = null;
+
+    let isCropMode = false;
+    let isDrawing = false;
+    let startX = 0;
+    let startY = 0;
+    let selectionBox = { left: 0, top: 0, width: 0, height: 0 };
+    let pagePositionCurrentEl = null;
+    let pagePositionTotalEl = null;
 
     function setAppTitle(fileName = '') {
         const title = fileName ? `${appTitle} - ${fileName}` : appTitle;
@@ -44,106 +46,81 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    uploadBtn.addEventListener('click', () => {
-        pdfInput.click();
-    });
-
-    if (welcomeUploadBtn) {
-        welcomeUploadBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            pdfInput.click();
-        });
-    }
-
-    if (dropZone) {
-        dropZone.addEventListener('click', () => {
-            pdfInput.click();
-        });
-
-        ['dragenter', 'dragover'].forEach(eventName => {
-            dropZone.addEventListener(eventName, (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                dropZone.classList.add('dragover');
-            }, false);
-        });
-
-        ['dragleave', 'drop'].forEach(eventName => {
-            dropZone.addEventListener(eventName, (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                dropZone.classList.remove('dragover');
-            }, false);
-        });
-
-        dropZone.addEventListener('drop', (e) => {
-            const dt = e.dataTransfer;
-            const files = dt.files;
-            if (files.length > 0) {
-                const file = files[0];
-                if (file.type === "application/pdf" || file.name.toLowerCase().endsWith('.pdf')) {
-                    handleFileUpload(file);
-                } else {
-                    alert("只支援上傳 PDF 檔案");
-                }
-            }
-        });
-    }
-
-    pdfInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            handleFileUpload(file);
+    function setupPagePositionIndicator() {
+        if (!pagePositionIndicator) return;
+        pagePositionIndicator.innerHTML = `
+            <button type="button" class="page-jump-trigger" title="Double click to jump">
+                <span id="page-position-current">0</span>
+            </button>
+            <span class="page-position-separator">/</span>
+            <span id="page-position-total">0</span>
+        `;
+        pagePositionCurrentEl = document.getElementById('page-position-current');
+        pagePositionTotalEl = document.getElementById('page-position-total');
+        const jumpTrigger = pagePositionIndicator.querySelector('.page-jump-trigger');
+        if (jumpTrigger) {
+            jumpTrigger.addEventListener('dblclick', requestPageJump);
         }
-    });
+    }
 
-    async function handleFileUpload(file) {
-        const tablesCheckbox = document.getElementById('tables-checkbox');
-        const addCaption = false;
-        const includeTables = tablesCheckbox ? tablesCheckbox.checked : false;
+    function requestPageJump() {
+        if (slides.length === 0) return;
+        const input = window.prompt(`跳轉到第幾頁？請輸入 1 到 ${slides.length}`, String(currentIndex + 1));
+        if (input === null) return;
+        const target = Number.parseInt(input, 10);
+        if (!Number.isFinite(target) || target < 1 || target > slides.length) {
+            alert(`請輸入 1 到 ${slides.length} 之間的頁碼`);
+            return;
+        }
+        currentIndex = target - 1;
+        updateSlide();
+    }
 
-        const formData = new FormData();
-        formData.append('pdf', file);
-        formData.append('add_caption', addCaption);
-        formData.append('include_tables', includeTables);
+    function renderLoadingProgress(message) {
+        if (!loading) return;
+        loading.innerHTML = `${message} <span class="loading-loop-symbol" aria-hidden="true"></span>`;
+    }
 
+    function startLoadingProgress(message = '處理中，請稍候...') {
+        if (!loading) return;
+        renderLoadingProgress(message);
         loading.style.display = 'block';
-        uploadBtn.disabled = true;
-        if (welcomeUploadBtn) welcomeUploadBtn.disabled = true;
+    }
 
-        try {
-            const response = await fetch('/upload', {
-                method: 'POST',
-                body: formData
-            });
+    function updateLoadingProgress(processedCount, totalExpected, message = '正在處理') {
+        const totalLabel = Number.isFinite(totalExpected) && totalExpected > 0
+            ? `${processedCount} / ${totalExpected}`
+            : `${processedCount}`;
+        renderLoadingProgress(`${message} 已完成 ${totalLabel} 張`);
+    }
 
-            const data = await response.json();
-            if (response.ok && data.status === 'success') {
-                pdfUrl = data.pdf_url;
-                currentPdfName = file.name.replace(/\.[^/.]+$/, "");
-                setAppTitle(file.name);
-                slides = data.slides.map(slide => ({ ...slide, selected: true }));
-                currentIndex = 0;
-
-                welcomeScreen.style.display = 'none';
-                viewerContainer.style.display = 'flex';
-
-                pdfFrame.src = pdfUrl;
-
-                updateSlide();
-                renderThumbnails();
-                updateDownloadButtonCount();
-            } else {
-                alert(data.error || '上傳失敗');
-            }
-        } catch (err) {
-            console.error(err);
-            alert('發生錯誤，請重試');
-        } finally {
+    function hideLoadingProgress() {
+        if (jobPollTimer) {
+            clearInterval(jobPollTimer);
+            jobPollTimer = null;
+        }
+        if (loading) {
             loading.style.display = 'none';
-            uploadBtn.disabled = false;
-            if (welcomeUploadBtn) welcomeUploadBtn.disabled = false;
-            pdfInput.value = '';
+        }
+    }
+
+    function ensureViewerVisible() {
+        welcomeScreen.style.display = 'none';
+        viewerContainer.style.display = 'flex';
+        if (pdfUrl) {
+            pdfFrame.src = pdfUrl;
+        }
+    }
+
+    function updateDownloadButtonCount() {
+        const selectedCount = slides.filter((s) => s.selected !== false).length;
+        if (downloadZipBtn) {
+            downloadZipBtn.textContent = `下載 ZIP 打包 (${selectedCount})`;
+            downloadZipBtn.disabled = selectedCount === 0;
+        }
+        if (selectAllBtn && slides.length > 0) {
+            const allSelected = slides.every((s) => s.selected !== false);
+            selectAllBtn.textContent = allSelected ? '取消全選' : '全選';
         }
     }
 
@@ -152,14 +129,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const slide = slides[currentIndex];
         currentSlide.src = slide.url;
         pageIndicator.textContent = `${slide.label} (p.${slide.page})`;
-        if (pagePositionIndicator) {
-            pagePositionIndicator.textContent = `${currentIndex + 1} / ${slides.length}`;
+        if (pagePositionCurrentEl && pagePositionTotalEl) {
+            pagePositionCurrentEl.textContent = String(currentIndex + 1);
+            pagePositionTotalEl.textContent = String(slides.length);
         }
-        
-        // Sync PDF view using url fragment hash
-        pdfFrame.contentWindow.location.replace(`${pdfUrl}#page=${slide.page}`);
 
-        // Update active class on thumbnails
+        if (pdfUrl) {
+            pdfFrame.contentWindow.location.replace(`${pdfUrl}#page=${slide.page}`);
+        }
+
         document.querySelectorAll('.thumb-item').forEach((thumb, idx) => {
             if (idx === currentIndex) {
                 thumb.classList.add('active');
@@ -205,7 +183,7 @@ document.addEventListener('DOMContentLoaded', () => {
             thumb.appendChild(img);
             thumb.appendChild(labelSpan);
             thumb.appendChild(checkbox);
-            
+
             thumb.addEventListener('click', () => {
                 currentIndex = idx;
                 updateSlide();
@@ -215,18 +193,202 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    prevBtn.addEventListener('click', () => {
-        if (currentIndex > 0) {
-            currentIndex--;
+    function mergeSlides(nextSlides) {
+        const previousLength = slides.length;
+        slides = nextSlides.map((slide, idx) => ({
+            ...slide,
+            selected: slides[idx]?.selected ?? true,
+        }));
+
+        if (slides.length === 0) return;
+
+        ensureViewerVisible();
+        renderThumbnails();
+        updateDownloadButtonCount();
+
+        if (!currentSlide.src || previousLength === 0) {
+            currentIndex = 0;
             updateSlide();
+            return;
+        }
+
+        if (currentIndex >= slides.length) {
+            currentIndex = slides.length - 1;
+        }
+        updateSlide();
+    }
+
+    async function pollJobStatus(jobId) {
+        try {
+            const response = await fetch(`/jobs/${jobId}`, { cache: 'no-store' });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || '輪詢處理狀態失敗');
+            }
+
+            if (data.pdf_url) {
+                pdfUrl = data.pdf_url;
+            }
+            if (Array.isArray(data.slides)) {
+                mergeSlides(data.slides);
+            }
+            if (data.status === 'error') {
+                throw new Error(data.error || '處理失敗');
+            }
+
+            updateLoadingProgress(
+                data.processed_count ?? 0,
+                data.total_expected,
+                data.message || '正在處理'
+            );
+
+            if (data.status === 'done') {
+                hideLoadingProgress();
+                currentJobId = null;
+                uploadBtn.disabled = false;
+                if (welcomeUploadBtn) welcomeUploadBtn.disabled = false;
+                pdfInput.value = '';
+            }
+        } catch (err) {
+            console.error(err);
+            hideLoadingProgress();
+            currentJobId = null;
+            uploadBtn.disabled = false;
+            if (welcomeUploadBtn) welcomeUploadBtn.disabled = false;
+            pdfInput.value = '';
+            alert(err.message || '發生錯誤，請重試');
+        }
+    }
+
+    function startJobPolling(jobId) {
+        currentJobId = jobId;
+        if (jobPollTimer) {
+            clearInterval(jobPollTimer);
+        }
+        pollJobStatus(jobId);
+        jobPollTimer = setInterval(() => {
+            pollJobStatus(jobId);
+        }, 800);
+    }
+
+    uploadBtn.addEventListener('click', () => {
+        pdfInput.click();
+    });
+
+    if (welcomeUploadBtn) {
+        welcomeUploadBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            pdfInput.click();
+        });
+    }
+
+    if (dropZone) {
+        dropZone.addEventListener('click', () => {
+            pdfInput.click();
+        });
+
+        ['dragenter', 'dragover'].forEach((eventName) => {
+            dropZone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dropZone.classList.add('dragover');
+            }, false);
+        });
+
+        ['dragleave', 'drop'].forEach((eventName) => {
+            dropZone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dropZone.classList.remove('dragover');
+            }, false);
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            if (files.length > 0) {
+                const file = files[0];
+                if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+                    handleFileUpload(file);
+                } else {
+                    alert('只支援上傳 PDF 檔案');
+                }
+            }
+        });
+    }
+
+    pdfInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            handleFileUpload(file);
         }
     });
 
-    nextBtn.addEventListener('click', () => {
-        if (currentIndex < slides.length - 1) {
-            currentIndex++;
-            updateSlide();
+    async function handleFileUpload(file) {
+        const tablesCheckbox = document.getElementById('tables-checkbox');
+        const figureCaptionToggle = document.getElementById('figure-caption-toggle');
+        const addCaption = false;
+        const includeTables = tablesCheckbox ? tablesCheckbox.checked : false;
+        const imageOnly = figureCaptionToggle ? !figureCaptionToggle.checked : false;
+
+        const formData = new FormData();
+        formData.append('pdf', file);
+        formData.append('add_caption', addCaption);
+        formData.append('include_tables', includeTables);
+        formData.append('image_only', imageOnly);
+
+        hideLoadingProgress();
+        startLoadingProgress('上傳完成，正在準備擷取...');
+        uploadBtn.disabled = true;
+        if (welcomeUploadBtn) welcomeUploadBtn.disabled = true;
+
+        slides = [];
+        currentIndex = 0;
+        currentJobId = null;
+        currentSlide.src = '';
+        thumbnailBar.innerHTML = '';
+        updateDownloadButtonCount();
+
+        try {
+            const response = await fetch('/upload', {
+                method: 'POST',
+                body: formData,
+            });
+
+            const data = await response.json();
+            if ((response.status === 202 || response.ok) && data.status === 'accepted') {
+                currentPdfName = file.name.replace(/\.[^/.]+$/, '');
+                setAppTitle(file.name);
+                pdfUrl = data.pdf_url;
+                startLoadingProgress('正在分析版面...');
+                startJobPolling(data.job_id);
+            } else {
+                hideLoadingProgress();
+                uploadBtn.disabled = false;
+                if (welcomeUploadBtn) welcomeUploadBtn.disabled = false;
+                pdfInput.value = '';
+                alert(data.error || '上傳失敗');
+            }
+        } catch (err) {
+            console.error(err);
+            hideLoadingProgress();
+            uploadBtn.disabled = false;
+            if (welcomeUploadBtn) welcomeUploadBtn.disabled = false;
+            pdfInput.value = '';
+            alert('發生錯誤，請重試');
         }
+    }
+
+    prevBtn.addEventListener('click', () => {
+        if (slides.length === 0) return;
+        currentIndex = (currentIndex - 1 + slides.length) % slides.length;
+        updateSlide();
+    });
+
+    nextBtn.addEventListener('click', () => {
+        if (slides.length === 0) return;
+        currentIndex = (currentIndex + 1) % slides.length;
+        updateSlide();
     });
 
     document.addEventListener('keydown', (e) => {
@@ -237,8 +399,6 @@ document.addEventListener('DOMContentLoaded', () => {
             nextBtn.click();
         }
     });
-
-    // ── Cropper Logic ────────────────────────────────────────────────────────
 
     function alignCropOverlay() {
         if (!currentSlide || !cropOverlay) return;
@@ -254,11 +414,10 @@ document.addEventListener('DOMContentLoaded', () => {
         cropModeBtn.textContent = '取消編輯';
         cropApplyBtn.style.display = 'block';
         cropOverlay.style.display = 'block';
-        cropOverlay.style.backgroundColor = 'rgba(0, 0, 0, 0.5)'; // Darken image initially
+        cropOverlay.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
         cropSelection.style.display = 'none';
-        
+
         alignCropOverlay();
-        
         selectionBox = { left: 0, top: 0, width: 0, height: 0 };
     }
 
@@ -289,16 +448,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const rect = cropOverlay.getBoundingClientRect();
             startX = e.clientX - rect.left;
             startY = e.clientY - rect.top;
-            
-            // Clear overall dark overlay and let selection's box-shadow darken the outer region
+
             cropOverlay.style.backgroundColor = 'transparent';
-            
             cropSelection.style.left = `${startX}px`;
             cropSelection.style.top = `${startY}px`;
             cropSelection.style.width = '0px';
             cropSelection.style.height = '0px';
             cropSelection.style.display = 'block';
-            
+
             selectionBox = { left: startX, top: startY, width: 0, height: 0 };
         });
 
@@ -307,17 +464,17 @@ document.addEventListener('DOMContentLoaded', () => {
             const rect = cropOverlay.getBoundingClientRect();
             const currentX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
             const currentY = Math.max(0, Math.min(e.clientY - rect.top, rect.height));
-            
+
             const x = Math.min(startX, currentX);
             const y = Math.min(startY, currentY);
             const w = Math.abs(startX - currentX);
             const h = Math.abs(startY - currentY);
-            
+
             cropSelection.style.left = `${x}px`;
             cropSelection.style.top = `${y}px`;
             cropSelection.style.width = `${w}px`;
             cropSelection.style.height = `${h}px`;
-            
+
             selectionBox = { left: x, top: y, width: w, height: h };
         });
 
@@ -332,21 +489,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert('請先在圖片上拖曳選取要裁切的範圍！');
                 return;
             }
-            
+
             const scaleX = currentSlide.naturalWidth / cropOverlay.clientWidth;
             const scaleY = currentSlide.naturalHeight / cropOverlay.clientHeight;
-            
+
             const sx = selectionBox.left * scaleX;
             const sy = selectionBox.top * scaleY;
             const sw = selectionBox.width * scaleX;
             const sh = selectionBox.height * scaleY;
-            
+
             const canvas = document.createElement('canvas');
             canvas.width = sw;
             canvas.height = sh;
             const ctx = canvas.getContext('2d');
             ctx.drawImage(currentSlide, sx, sy, sw, sh, 0, 0, sw, sh);
-            
+
             const dataUrl = canvas.toDataURL();
             currentSlide.src = dataUrl;
             if (slides.length > 0) {
@@ -375,51 +532,40 @@ document.addEventListener('DOMContentLoaded', () => {
             alignCropOverlay();
         }
     });
+
     window.addEventListener('resize', () => {
         if (isCropMode && cropOverlay.style.display === 'block') {
             alignCropOverlay();
         }
     });
 
-    function updateDownloadButtonCount() {
-        const selectedCount = slides.filter(s => s.selected !== false).length;
-        if (downloadZipBtn) {
-            downloadZipBtn.textContent = `下載 ZIP 打包 (${selectedCount})`;
-            downloadZipBtn.disabled = selectedCount === 0;
-        }
-        if (selectAllBtn && slides.length > 0) {
-            const allSelected = slides.every(s => s.selected !== false);
-            selectAllBtn.textContent = allSelected ? '取消全選' : '全選';
-        }
-    }
-
     if (selectAllBtn) {
         selectAllBtn.addEventListener('click', () => {
-            const allSelected = slides.every(s => s.selected !== false);
-            slides.forEach(s => s.selected = !allSelected);
-            
-            // 更新 DOM 中所有的 checkboxes
+            const allSelected = slides.every((s) => s.selected !== false);
+            slides.forEach((s) => {
+                s.selected = !allSelected;
+            });
+
             document.querySelectorAll('.thumb-checkbox').forEach((cb, idx) => {
                 cb.checked = slides[idx].selected;
             });
-            
+
             updateDownloadButtonCount();
         });
     }
 
     if (downloadZipBtn) {
         downloadZipBtn.addEventListener('click', async () => {
-            const selectedSlides = slides.filter(s => s.selected !== false);
+            const selectedSlides = slides.filter((s) => s.selected !== false);
             if (selectedSlides.length === 0) return;
-            
-            const originalText = downloadZipBtn.textContent;
+
             downloadZipBtn.textContent = '打包中...';
             downloadZipBtn.disabled = true;
-            
+
             const zip = new JSZip();
-            
+
             try {
-                for (let i = 0; i < selectedSlides.length; i++) {
+                for (let i = 0; i < selectedSlides.length; i += 1) {
                     const slide = selectedSlides[i];
                     let blob;
                     if (slide.url.startsWith('data:')) {
@@ -428,10 +574,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         const res = await fetch(slide.url);
                         blob = await res.blob();
                     }
-                    const safeLabel = (slide.label || `image_${i+1}`).replace(/[\\\/:*?"<>|]/g, "_");
+                    const safeLabel = (slide.label || `image_${i + 1}`).replace(/[\\/:*?"<>|]/g, '_');
                     zip.file(`${safeLabel}.png`, blob);
                 }
-                
+
                 const content = await zip.generateAsync({ type: 'blob' });
                 const link = document.createElement('a');
                 link.href = URL.createObjectURL(content);
@@ -449,13 +595,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function dataURLtoBlob(dataurl) {
-        var arr = dataurl.split(','), mime = arr[0].match(/:(.*?);/)[1],
-            bstr = atob(arr[1]), n = bstr.length, u8arr = new Uint8Array(n);
-        while(n--){
+        const arr = dataurl.split(',');
+        const mime = arr[0].match(/:(.*?);/)[1];
+        const bstr = atob(arr[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while (n--) {
             u8arr[n] = bstr.charCodeAt(n);
         }
-        return new Blob([u8arr], {type:mime});
+        return new Blob([u8arr], { type: mime });
     }
 
+    setupPagePositionIndicator();
     updateDownloadButtonCount();
 });

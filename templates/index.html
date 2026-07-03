@@ -16,10 +16,20 @@
             <span class="logo-text" id="app-title">Extract Figures From PDF</span>
         </div>
         <div class="upload-container">
-            <form id="upload-form" enctype="multipart/form-data" style="display: flex; align-items: center; gap: 16px;">
+            <form id="upload-form" class="upload-form" enctype="multipart/form-data">
                 <input type="file" id="pdf-input" name="pdf" accept=".pdf" style="display: none;">
                 <label class="checkbox-label">
                     <input type="checkbox" id="tables-checkbox" checked> 包含 Tables 表格
+                </label>
+                <label class="titlebar-toggle" for="figure-caption-toggle">
+                    <span class="titlebar-toggle-copy">
+                        <span class="titlebar-toggle-label">Figure Caption</span>
+                        <span class="titlebar-toggle-hint">OFF = image only</span>
+                    </span>
+                    <span class="titlebar-toggle-switch">
+                        <input type="checkbox" id="figure-caption-toggle" checked>
+                        <span class="titlebar-toggle-slider" aria-hidden="true"></span>
+                    </span>
                 </label>
                 <button type="button" id="upload-btn" class="btn btn-primary">選擇並上傳 PDF</button>
             </form>
@@ -42,15 +52,12 @@
         </div>
 
         <div id="viewer-container" class="viewer-container" style="display: none;">
-            <!-- 左側 PDF 檢視器 -->
             <div class="panel left-panel">
                 <iframe id="pdf-frame" src="" width="100%" height="100%" frameborder="0"></iframe>
             </div>
 
-            <!-- 分割條 -->
             <div class="splitter"></div>
 
-            <!-- 右側 PNG 投影片 -->
             <div class="panel right-panel">
                 <div class="slide-viewer">
                     <div id="page-position-indicator" class="page-position-indicator">0 / 0</div>

@@ -5,3 +5,14 @@ __pycache__/
 blocks.txt
 drawings.txt
 scratch.py
+artifacts/output/*
+!artifacts/output/legacy_output/
+artifacts/logs/*.log
+artifacts/debug/
+artifacts/review/
+*.env
+*.log
+
+.agents/
+.codex/
+knowledge/
