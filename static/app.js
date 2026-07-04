@@ -22,12 +22,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const cropSelection = document.getElementById('crop-selection');
     const welcomeUploadBtn = document.getElementById('welcome-upload-btn');
     const dropZone = document.getElementById('drop-zone');
+    const loadSessionSelect = document.getElementById('load-session-select');
+    const loadSessionBtn = document.getElementById('load-session-btn');
+    const welcomeLoadBtn = document.getElementById('welcome-load-btn');
 
     let pdfUrl = '';
     let slides = [];
     let currentIndex = 0;
     let currentPdfName = '';
     let currentJobId = null;
+    let currentSessionId = '';
+    let availableSessions = [];
     let jobPollTimer = null;
 
     let isCropMode = false;
@@ -44,6 +49,119 @@ document.addEventListener('DOMContentLoaded', () => {
         if (appTitleEl) {
             appTitleEl.textContent = title;
         }
+    }
+
+    function setLoadControlsEnabled(enabled) {
+        if (loadSessionBtn) loadSessionBtn.disabled = !enabled;
+        if (welcomeLoadBtn) welcomeLoadBtn.disabled = !enabled;
+    }
+
+    function updateSessionControls() {
+        const hasSessions = availableSessions.length > 0;
+        if (loadSessionSelect) {
+            loadSessionSelect.innerHTML = '';
+            if (!hasSessions) {
+                const option = document.createElement('option');
+                option.value = '';
+                option.textContent = 'No saved PDF';
+                loadSessionSelect.appendChild(option);
+            } else {
+                availableSessions.forEach((session) => {
+                    const option = document.createElement('option');
+                    option.value = session.session_id;
+                    const count = Number.isFinite(session.slide_count) ? ` (${session.slide_count})` : '';
+                    option.textContent = `${session.pdf_name || session.title}${count}`;
+                    loadSessionSelect.appendChild(option);
+                });
+            }
+        }
+        setLoadControlsEnabled(hasSessions && !currentJobId);
+    }
+
+    async function refreshSessionList() {
+        try {
+            const response = await fetch('/sessions', { cache: 'no-store' });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to list saved PDFs');
+            }
+            availableSessions = Array.isArray(data.sessions) ? data.sessions : [];
+            updateSessionControls();
+        } catch (err) {
+            console.error(err);
+            availableSessions = [];
+            updateSessionControls();
+        }
+    }
+
+    function resetViewerState() {
+        hideLoadingProgress();
+        slides = [];
+        currentIndex = 0;
+        currentJobId = null;
+        currentSlide.src = '';
+        thumbnailBar.innerHTML = '';
+        updateDownloadButtonCount();
+    }
+
+    function applyLoadedSession(data) {
+        resetViewerState();
+        currentSessionId = data.session_id || '';
+        currentPdfName = (data.pdf_name || data.title || 'extracted_images').replace(/\.[^/.]+$/, '');
+        pdfUrl = data.pdf_url || '';
+        setAppTitle(data.pdf_name || data.title || '');
+        mergeSlides(Array.isArray(data.slides) ? data.slides : []);
+        if (pdfUrl) {
+            ensureViewerVisible();
+        }
+    }
+
+    async function loadSelectedSession() {
+        const selectedSessionId = loadSessionSelect ? loadSessionSelect.value : '';
+        if (!selectedSessionId) return;
+        const sessionPath = selectedSessionId.split('/').map(encodeURIComponent).join('/');
+
+        hideLoadingProgress();
+        startLoadingProgress('Loading saved PDF...');
+        uploadBtn.disabled = true;
+        if (welcomeUploadBtn) welcomeUploadBtn.disabled = true;
+        setLoadControlsEnabled(false);
+
+        try {
+            const response = await fetch(`/sessions/${sessionPath}`, { cache: 'no-store' });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to load saved PDF');
+            }
+            applyLoadedSession(data);
+        } catch (err) {
+            console.error(err);
+            alert(err.message || 'Failed to load saved PDF');
+        } finally {
+            hideLoadingProgress();
+            uploadBtn.disabled = false;
+            if (welcomeUploadBtn) welcomeUploadBtn.disabled = false;
+            updateSessionControls();
+        }
+    }
+
+    async function saveEditedSlide(slideIndex, dataUrl) {
+        if (!currentSessionId) {
+            throw new Error('No loaded PDF session is available.');
+        }
+        const sessionPath = currentSessionId.split('/').map(encodeURIComponent).join('/');
+        const response = await fetch(`/sessions/${sessionPath}/slides/${slideIndex}/image`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ data_url: dataUrl }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to save edited image');
+        }
+        return data.slide || { url: data.url };
     }
 
     function setupPagePositionIndicator() {
@@ -247,6 +365,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 currentJobId = null;
                 uploadBtn.disabled = false;
                 if (welcomeUploadBtn) welcomeUploadBtn.disabled = false;
+                refreshSessionList();
                 pdfInput.value = '';
             }
         } catch (err) {
@@ -255,6 +374,7 @@ document.addEventListener('DOMContentLoaded', () => {
             currentJobId = null;
             uploadBtn.disabled = false;
             if (welcomeUploadBtn) welcomeUploadBtn.disabled = false;
+            updateSessionControls();
             pdfInput.value = '';
             alert(err.message || '發生錯誤，請重試');
         }
@@ -274,6 +394,17 @@ document.addEventListener('DOMContentLoaded', () => {
     uploadBtn.addEventListener('click', () => {
         pdfInput.click();
     });
+
+    if (loadSessionBtn) {
+        loadSessionBtn.addEventListener('click', loadSelectedSession);
+    }
+
+    if (welcomeLoadBtn) {
+        welcomeLoadBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            loadSelectedSession();
+        });
+    }
 
     if (welcomeUploadBtn) {
         welcomeUploadBtn.addEventListener('click', (e) => {
@@ -341,10 +472,12 @@ document.addEventListener('DOMContentLoaded', () => {
         startLoadingProgress('上傳完成，正在準備擷取...');
         uploadBtn.disabled = true;
         if (welcomeUploadBtn) welcomeUploadBtn.disabled = true;
+        setLoadControlsEnabled(false);
 
         slides = [];
         currentIndex = 0;
         currentJobId = null;
+        currentSessionId = '';
         currentSlide.src = '';
         thumbnailBar.innerHTML = '';
         updateDownloadButtonCount();
@@ -358,6 +491,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
             if ((response.status === 202 || response.ok) && data.status === 'accepted') {
                 currentPdfName = file.name.replace(/\.[^/.]+$/, '');
+                currentSessionId = data.session_id || '';
                 setAppTitle(file.name);
                 pdfUrl = data.pdf_url;
                 startLoadingProgress('正在分析版面...');
@@ -484,7 +618,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (cropApplyBtn) {
-        cropApplyBtn.addEventListener('click', () => {
+        cropApplyBtn.addEventListener('click', async () => {
             if (selectionBox.width < 5 || selectionBox.height < 5) {
                 alert('請先在圖片上拖曳選取要裁切的範圍！');
                 return;
@@ -507,10 +641,29 @@ document.addEventListener('DOMContentLoaded', () => {
             const dataUrl = canvas.toDataURL();
             currentSlide.src = dataUrl;
             if (slides.length > 0) {
+                const originalUrl = slides[currentIndex].original_url || slides[currentIndex].url;
                 slides[currentIndex].url = dataUrl;
+                slides[currentIndex].original_url = originalUrl;
                 const activeThumbImg = document.querySelector('.thumb-item.active img');
                 if (activeThumbImg) {
                     activeThumbImg.src = dataUrl;
+                }
+                try {
+                    const savedSlide = await saveEditedSlide(currentIndex, dataUrl);
+                    slides[currentIndex] = {
+                        ...slides[currentIndex],
+                        ...savedSlide,
+                        selected: slides[currentIndex].selected,
+                        original_url: savedSlide.original_url || originalUrl,
+                    };
+                    currentSlide.src = slides[currentIndex].url;
+                    if (activeThumbImg) {
+                        activeThumbImg.src = slides[currentIndex].url;
+                    }
+                    refreshSessionList();
+                } catch (err) {
+                    console.error(err);
+                    alert(err.message || 'Failed to save edited image');
                 }
             }
             cropResetBtn.style.display = 'block';
@@ -521,7 +674,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (cropResetBtn) {
         cropResetBtn.addEventListener('click', () => {
             if (slides.length > 0) {
-                currentSlide.src = slides[currentIndex].url;
+                currentSlide.src = slides[currentIndex].original_url || slides[currentIndex].url;
                 cropResetBtn.style.display = 'none';
             }
         });
@@ -608,4 +761,5 @@ document.addEventListener('DOMContentLoaded', () => {
 
     setupPagePositionIndicator();
     updateDownloadButtonCount();
+    refreshSessionList();
 });

@@ -101,6 +101,23 @@ body {
     background-color: #f1f3f4;
 }
 
+.session-select {
+    min-width: 180px;
+    max-width: 260px;
+    height: 36px;
+    padding: 0 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: #ffffff;
+    color: var(--text-color);
+    font-size: 13px;
+}
+
+.session-select:disabled {
+    color: var(--text-light);
+    background: #f8f9fa;
+}
+
 .loading {
     font-size: 14px;
     color: var(--primary-color);
@@ -160,6 +177,10 @@ body {
 .welcome-screen p {
     color: var(--text-light);
     font-size: 14px;
+}
+
+#welcome-load-btn {
+    margin-top: 8px;
 }
 
 .upload-icon {
